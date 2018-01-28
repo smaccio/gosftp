@@ -1,4 +1,4 @@
-package sftp_test
+package gosftp_test
 
 import (
 	"bufio"

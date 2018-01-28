@@ -1,6 +1,6 @@
 // +build !windows
 
-package sftp
+package gosftp
 
 import (
 	"errors"

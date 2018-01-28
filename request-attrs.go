@@ -1,4 +1,4 @@
-package sftp
+package gosftp
 
 // Methods on the Request object to make working with the Flags bitmasks and
 // Attr(ibutes) byte blob easier. Use Pflags() when working with an Open/Write
