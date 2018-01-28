@@ -1,6 +1,8 @@
 .*.swo
 .*.swp
 
+.idea
+
 server_standalone/server_standalone
 
 examples/*/id_rsa
