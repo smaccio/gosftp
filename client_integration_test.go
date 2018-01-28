@@ -1,4 +1,4 @@
-package sftp
+package gosftp
 
 // sftp integration tests
 // enable with -integration

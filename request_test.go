@@ -1,4 +1,4 @@
-package sftp
+package gosftp
 
 import (
 	"github.com/stretchr/testify/assert"

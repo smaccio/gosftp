@@ -1,5 +1,5 @@
 // +build !linux,!darwin
 
-package sftp
+package gosftp
 
 const sftpServer = "/usr/bin/false" // unsupported

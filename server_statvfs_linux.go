@@ -1,6 +1,6 @@
 // +build !gccgo,linux
 
-package sftp
+package gosftp
 
 import (
 	"syscall"

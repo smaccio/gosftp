@@ -1,6 +1,6 @@
 // +build !cgo,!plan9 windows android
 
-package sftp
+package gosftp
 
 import (
 	"os"
