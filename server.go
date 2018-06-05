@@ -149,7 +149,7 @@ func (svr *Server) sftpServerWorker(pktChan chan requestPacket) error {
 		case *sshFxpOpenPacket:
 			readonly = pkt.readonly()
 		case *sshFxpExtendedPacket:
-			readonly = pkt.SpecificPacket.readonly()
+			readonly = pkt.readonly()
 		}
 
 		// If server is operating read-only and a write operation is requested,
@@ -323,9 +323,18 @@ func (svr *Server) Serve() error {
 
 		pkt, err = makePacket(rxPacket{fxp(pktType), pktBytes})
 		if err != nil {
-			debug("makePacket err: %v", err)
-			svr.conn.Close() // shuts down recvPacket
-			break
+			switch errors.Cause(err) {
+			case errUnknownExtendedPacket:
+				if err := svr.serverConn.sendError(pkt, ErrSshFxOpUnsupported); err != nil {
+					debug("failed to send err packet: %v", err)
+					svr.conn.Close() // shuts down recvPacket
+					break
+				}
+			default:
+				debug("makePacket err: %v", err)
+				svr.conn.Close() // shuts down recvPacket
+				break
+			}
 		}
 
 		pktChan <- pkt
@@ -481,7 +490,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		var uid uint32
 		var gid uint32
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
+		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = os.Chown(svr.path(p.Path), int(uid), int(gid))
 		}
@@ -528,7 +537,7 @@ func (p sshFxpFsetstatPacket) respond(svr *Server) error {
 		var uid uint32
 		var gid uint32
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
-		} else if gid, b, err = unmarshalUint32Safe(b); err != nil {
+		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
 			err = f.Chown(int(uid), int(gid))
 		}
