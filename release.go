@@ -1,5 +1,5 @@
 // +build !debug
 
-package sftp
+package gosftp
 
 func debug(fmt string, args ...interface{}) {}

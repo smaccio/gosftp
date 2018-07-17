@@ -1,4 +1,4 @@
-package sftp
+package gosftp
 
 // sftp server counterpart
 
@@ -29,11 +29,19 @@ type Server struct {
 	*serverConn
 	debugStream   io.Writer
 	readOnly      bool
+	chroot	      string
 	pktMgr        *packetManager
 	openFiles     map[string]*os.File
 	openFilesLock sync.RWMutex
 	handleCount   int
 	maxTxPacket   uint32
+}
+
+func (svr *Server) path(p string) string {
+	if svr.chroot != "" {
+		return filepath.Clean(filepath.Join(svr.chroot, p))
+	}
+	return p
 }
 
 func (svr *Server) nextHandle(f *os.File) string {
@@ -117,6 +125,13 @@ func ReadOnly() ServerOption {
 	}
 }
 
+func Chroot(path string) ServerOption {
+	return func(s *Server) error {
+		s.chroot = path
+		return nil
+	}
+}
+
 type rxPacket struct {
 	pktType  fxp
 	pktBytes []byte
@@ -159,7 +174,7 @@ func handlePacket(s *Server, p interface{}) error {
 		return s.sendPacket(sshFxVersionPacket{sftpProtocolVersion, nil})
 	case *sshFxpStatPacket:
 		// stat the requested file
-		info, err := os.Stat(p.Path)
+		info, err := os.Stat(s.path(p.Path))
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -169,7 +184,7 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 	case *sshFxpLstatPacket:
 		// stat the requested file
-		info, err := os.Lstat(p.Path)
+		info, err := os.Lstat(s.path(p.Path))
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -194,24 +209,24 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 	case *sshFxpMkdirPacket:
 		// TODO FIXME: ignore flags field
-		err := os.Mkdir(p.Path, 0755)
+		err := os.Mkdir(s.path(p.Path), 0755)
 		return s.sendError(p, err)
 	case *sshFxpRmdirPacket:
-		err := os.Remove(p.Path)
+		err := os.Remove(s.path(p.Path))
 		return s.sendError(p, err)
 	case *sshFxpRemovePacket:
-		err := os.Remove(p.Filename)
+		err := os.Remove(s.path(p.Filename))
 		return s.sendError(p, err)
 	case *sshFxpRenamePacket:
-		err := os.Rename(p.Oldpath, p.Newpath)
+		err := os.Rename(s.path(p.Oldpath), s.path(p.Newpath))
 		return s.sendError(p, err)
 	case *sshFxpSymlinkPacket:
-		err := os.Symlink(p.Targetpath, p.Linkpath)
+		err := os.Symlink(s.path(p.Targetpath), s.path(p.Linkpath))
 		return s.sendError(p, err)
 	case *sshFxpClosePacket:
 		return s.sendError(p, s.closeHandle(p.Handle))
 	case *sshFxpReadlinkPacket:
-		f, err := os.Readlink(p.Path)
+		f, err := os.Readlink(s.path(p.Path))
 		if err != nil {
 			return s.sendError(p, err)
 		}
@@ -226,11 +241,15 @@ func handlePacket(s *Server, p interface{}) error {
 		})
 
 	case *sshFxpRealpathPacket:
-		f, err := filepath.Abs(p.Path)
-		if err != nil {
-			return s.sendError(p, err)
+		f := "/"
+		if s.chroot == "" {
+			f, err := filepath.Abs(p.Path)
+			if err != nil {
+				return s.sendError(p, err)
+			}
+			f = cleanPath(f)
 		}
-		f = cleanPath(f)
+
 		return s.sendPacket(sshFxpNamePacket{
 			ID: p.ID,
 			NameAttrs: []sshFxpNameAttr{{
@@ -412,7 +431,7 @@ func (p sshFxpOpenPacket) respond(svr *Server) error {
 		osFlags |= os.O_EXCL
 	}
 
-	f, err := os.OpenFile(p.Path, osFlags, 0644)
+	f, err := os.OpenFile(svr.path(p.Path), osFlags, 0644)
 	if err != nil {
 		return svr.sendError(p, err)
 	}
@@ -459,7 +478,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 	if (p.Flags & ssh_FILEXFER_ATTR_PERMISSIONS) != 0 {
 		var mode uint32
 		if mode, b, err = unmarshalUint32Safe(b); err == nil {
-			err = os.Chmod(p.Path, os.FileMode(mode))
+			err = os.Chmod(svr.path(p.Path), os.FileMode(mode))
 		}
 	}
 	if (p.Flags & ssh_FILEXFER_ATTR_ACMODTIME) != 0 {
@@ -470,7 +489,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		} else {
 			atimeT := time.Unix(int64(atime), 0)
 			mtimeT := time.Unix(int64(mtime), 0)
-			err = os.Chtimes(p.Path, atimeT, mtimeT)
+			err = os.Chtimes(svr.path(p.Path), atimeT, mtimeT)
 		}
 	}
 	if (p.Flags & ssh_FILEXFER_ATTR_UIDGID) != 0 {
@@ -479,7 +498,7 @@ func (p sshFxpSetstatPacket) respond(svr *Server) error {
 		if uid, b, err = unmarshalUint32Safe(b); err != nil {
 		} else if gid, _, err = unmarshalUint32Safe(b); err != nil {
 		} else {
-			err = os.Chown(p.Path, int(uid), int(gid))
+			err = os.Chown(svr.path(p.Path), int(uid), int(gid))
 		}
 	}
 

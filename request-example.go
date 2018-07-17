@@ -1,4 +1,4 @@
-package sftp
+package gosftp
 
 // This serves as an example of how to implement the request server handler as
 // well as a dummy backend for testing. It implements an in-memory backend that

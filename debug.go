@@ -1,6 +1,6 @@
 // +build debug
 
-package sftp
+package gosftp
 
 import "log"
 
